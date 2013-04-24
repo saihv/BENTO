@@ -1,8 +1,9 @@
 ﻿''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' Created by Andres Mora
+' Modified by Sai Vemprala
 ' Extreme Environments Robotics and Instrumentation Lab
 ' SESE, ASU
-' April, 2012
+' February 2013
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
@@ -27,12 +28,10 @@ Public Sub MeasureSO2
 			PowerAd 1, 1 				' To Power ON Digital Switched 12V
 			Sleep 5.0					' Give some time to the SO2 sensor to wake up
 
-			So2Raw = Ad420(1, 5)  'Module 1, Input Analog Chan 5
-			'mVolts = 5 * adcRaw + (adcRaw ** $1666)   ' x 5.0875 'Calibration equation taken from previous JPL deployment @ Kilahuea
-			So2Data = 5*So2Raw + (So2Raw*5.0875)	' To eliminate the decimal point from the SBD message we multiply by 100)
-		
-			StatusMsg "So2Raw: " +So2Raw + " So2: " +So2Data
-		
+			So2Data = Ad420(1, 10)  'Module 1, Input Analog Chan 5			
+			
+			StatusMsg "So2 level: " +So2Data
+
 			PowerAd 1, 0 				' To Power OFF Digital Switched 12V
 		Else
 			ErrorMsg "MeasureSO2: Something failed"

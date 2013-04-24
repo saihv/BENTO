@@ -1,8 +1,8 @@
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
-' Created by Andres Mora
+' Authors: Andres Mora, Sai Vemprala
 ' Extreme Environments Robotics and Instrumentation Lab
 ' SESE, ASU
-' April, 2012
+' April 2013
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''' 
 ' This program supports measuring Vaisala CO2 sensor. 
@@ -36,7 +36,7 @@ Const MAXBYTES = 200             ' Max num bytes in sensor response. See manual.
 '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' Configuration Parameters
 '
-Const SENSORNAME = "CO2"      ' Name used on block output and sensors page
+Const SENSORNAME 	= "CO2"      ' Name used on block output and sensors page
 
 Const PORTNAME = "COM4:"
 Const BAUDRATE = 19200

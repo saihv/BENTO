@@ -1,0 +1,63 @@
+---------------------------------------------------------------------------------
+ 
+  Extreme Environments Robotics and Instrumentation Lab
+  SESE, ASU
+  April, 2012
+ 
+  All .bas files Created by Andres Mora
+  Modified and/or updated by Cedric Cocaud
+  June 25, 2012
+ 
+---------------------------------------------------------------------------------
+
+Note on COM Port configuration:
+
+- the Iridium modem should be connected to COM3 
+  and COM3 should be supplied by 12 V
+  The Sutron box needs to be open and the jumper configuration p 121 of User Manual 
+  (p131 in "Sutron_9210B Use Manual.pdf") for [+12 SW'D] 
+  should be set for COM3 (the set of jumper for COM3 is shown on p 122 (p132 in "Sutron_9210B Use Manual.pdf")   
+
+- The same jumper configuration should be applied to COM4 where the CO2 sensor's DB-9 connector should be plugged 
+
+Note on new Code (25/06/2012):
+
+measureSO2.bas => This last file is not used anymore after the changes via GUI I made to gather the SO2 values.
+
+
+Instructions to access setup of Sutron 9120 XLite
+
+- Power ON Sutron and wait for end of init sequence
+- connect PC to Sutron by plugging USB-to-RS232 adapter in Com1 port of Sutron
+- Double click XTerm.exe on PC
+- Select Com port on PC that is connected to Sutron
+- Select baud rate = 115200
+- Click OK
+- Wait for Graphical User Interface to show up 
+- Click on Setup Access
+- Click on Setup Tab
+
+
+Instructions on settings to be made on [Setup] Tab
+
+- select [Coms]
+- Click Edit
+- Make sure that 
+	Com1 is set to : [Direct] [115200] unchecked
+ 	Com3 is set to : [None]   [19200]  checked
+	Com4 is set to : [None]   [19200] checked
+- Click OK 	
+
+Instructions on settings to be made in [Sensors]
+
+- Select ADC
+- Click on Prop
+- Type the exact value of the resistor that should be placed physically between the pin [Ch10] and the pin [AGND]
+- [Meas Type] should be == [4-20ma]
+- Click OK
+
+Instructions on accessing log file
+
+- Click on [Log] tab
+- Click the arrow in the [Log] text input field
+- Select [\Flash Disk\ssp.log] 
