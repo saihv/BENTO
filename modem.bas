@@ -39,6 +39,9 @@ Const MAXBYTES = 200             ' Max num bytes in sensor response. See manual.
 Const TrueOne = -1
 Const FalseOne = 0
 
+ 
+
+
 
 '**************************************************************************
 ' Configuration Parameters
@@ -69,19 +72,17 @@ Static CO2Data
 Static weatherData
 Static So2Data
 Static F2Level
-Static NanoData
-Static Env
-Static Tim
-Static Trig
-Static SoH
-Static TimS
-Static Offset
-Static SO2Offset
+Static SO2_offset
+Static offset 
+SO2_positive_offset = 0
 
 '**************************************************************************
 ' Initialize Iridium Modem
 '**************************************************************************
 Public Sub ModemInit(PORTNAME)
+
+  StatusMsg "SO2 data entering modem: " +So2Data
+  
 
   On Error Resume Next
 	PORT = FreeFile
@@ -92,7 +93,7 @@ Public Sub ModemInit(PORTNAME)
 		Exit Sub
 	End If
   
-	SetPort PORT, BAUDRATE, NOPARITY, DATABITS, STOPBITS, FLOWCONTROL
+ 	SetPort PORT, BAUDRATE, NOPARITY, DATABITS, STOPBITS, FLOWCONTROL
 	SetTimeout PORT, PORT_TIMEOUT
 	Turn Left(PORTNAME,Len(PORTNAME)-1), "ON"
 	SetDtr PORT, 1
@@ -211,12 +212,14 @@ Public Sub SendReceiveSBD(PORTNAME)
 				RemoteCmd = HayesCommand(PORT, "AT+SBDRT", 10)
 				StatusMsg "RemoteCmd: " & RemoteCmd
 
-				Commandctr = 0
-
+				CommandCtr = 0
+	
 				If Right(RemoteCmd,1) = "K" then
 					Length = Len(RemoteCmd)
+					StatusMsg "Length is" & Length
 					If Length = 8 Then
 						ABC = ParseCommand(RemoteCmd)
+						StatusMsg "Parsing Single Command"
 					Else
 						i = 1
 						While i <= Length
@@ -240,17 +243,16 @@ Public Sub SendReceiveSBD(PORTNAME)
 									Commandctr = Commandctr + 1
 								End If
 							End If
+							i = i+1
 						Wend
+						CommandLast = Mid(RemoteCmd, NextStart, Length)
+						StatusMsg "Parsing final command" & CommandLast
+						ABC = ParseCommand(CommandLast)
 					End If
-								
-
-				Else											'<--Maintain 	Current Mode
-					ErrorMsg "No Msg RXed, keeping actual Rate= " &Rate
-					goto ErrorHandler
-				
-				End If
 	
 				'StatusMsg "I finished!"							' For Debugging Only
+
+				End If
 					
 			End If
 			
@@ -300,26 +302,26 @@ Public Sub FormatData(DataSetToTX)
 	DateTimeStr = DateStr & TimeStr
 		
 	'First, add the weather values (8) to the string to TX
-	For i = 1 To 6
+	For i = 1 To Ubound(weatherData)-1
 		If i = 1 then
-			DataToTx = weatherData(i) & "D" 'Bin6(Int(weatherData(i)*100), 3)
+			DataToTx = weatherData(i) & "W" 'Bin6(Int(weatherData(i)*100), 3)
 		ElseIf i = 2 then
-			DataToTx = DataToTx & "," & weatherData(i) & "W"
+			DataToTx = DataToTx & "," & weatherData(i) & "D"
 			'StatusMsg "<" + DataToTx + " >"		'Debugging
 		ElseIf i = 3 then
-			DataToTx = DataToTx & "," & weatherData(i) & "T"
+			DataToTx = DataToTx & "," & weatherData(i) & "S"
 			'StatusMsg "<" + DataToTx + " >"		'Debugging
 		ElseIf i = 4 then
-			DataToTx = DataToTx & "," & weatherData(i) & "H"
-			'StatusMsg "<" + DataToTx + " >"		'Debugging
-		ElseIf i = 5 then
 			DataToTx = DataToTx & "," & weatherData(i) & "P"
 			'StatusMsg "<" + DataToTx + " >"		'Debugging
-		ElseIf i = 6 then
+		ElseIf i = 5 then
 			DataToTx = DataToTx & "," & weatherData(i) & "R"
 			'StatusMsg "<" + DataToTx + " >"		'Debugging
-		'Else
-			'DataToTx = DataToTx & "," & weatherData(i) & "X"
+		ElseIf i = 6 then
+			DataToTx = DataToTx & "," & weatherData(i) & "H"
+			'StatusMsg "<" + DataToTx + " >"		'Debugging
+		Else
+			DataToTx = DataToTx & "," & weatherData(i) & "X"
 			'StatusMsg "<" + DataToTx + " >"		'Debugging
 		End If
 	Next i
@@ -327,10 +329,9 @@ Public Sub FormatData(DataSetToTX)
 	'Second, add the CO2 value to the string to TX
 	DataToTx = DataToTx + "," + CO2Data + "C"
 	
+	StatusMsg "SO2 data just before sending: " +So2Data
 	'Finally, add the SO2 value to the string to TX
 	DataToTx = DataToTx + "," + So2Data + "S"
-
-	DataToTx = DataToTx + "," + NanoData
 	
 	'Grab First Set of data and add battery voltage and Rate values too
 	battery = Format("%2.1f", Systat(5))		' Systat provides info about Sutron's internal state according to input number. 5 = Battery status/value
@@ -339,9 +340,9 @@ Public Sub FormatData(DataSetToTX)
 
 	StatusMsg "<" + DataSetToTX + ">"
 
-	Open "\SD Card\Output.Txt" For Append As F1
-	Print F1, DataSetToTX
-	Close F1
+	'Open "\SD Card\Output.Txt" For Append As F1
+	'Print F1, DataSetToTX
+	'Close F1
 	
 End Sub
 
@@ -349,15 +350,15 @@ End Sub
 '************************************************************************
 ' HayesCommand code.
 '************************************************************************
-
 Public Function HayesCommand(Handle, Command, TimeoutSec)
   Result = ""
-  Command = ""
+  Abc = ""
   If Command <> "" Then
-     Sleep 0.2
+     Sleep 1.0
      FlushInput Handle
      ' Tack on a CR and send the command to the modem
-     Print Handle, Command; Chr(13);
+     StatusMsg "Command before sending is" & Command
+     Print Handle, Command
      'DEBUG:
      StatusMsg "Sending to Modem: " & Command
   End If
@@ -367,13 +368,14 @@ Public Function HayesCommand(Handle, Command, TimeoutSec)
   StartTime = GetTickCount
   Do
      Line Input Handle, Result
-     StatusMsg "Result" & Result
+     StatusMsg "Result is:" & Result
      If Result = "+SBDRT:" Then
-     	Line Input Handle, Command
-     	StatusMsg "Command is" & Command
-     	Result = Command
+     	Line Input Handle, Abc
+     	StatusMsg "Abc is" & Abc
+     	Result = Abc
      End If
-  Loop Until (Result <> "") And (Result <> Command) Or ((GetTickCount-StartTime)/1000 >= TimeoutSec)
+  Loop Until (Result <> "") And (Result <> Command) Or
+((GetTickCount-StartTime)/1000 >= TimeoutSec)
   If Left(Result, 1) = "#" Then ' Handle special results that have an OK at the end
      Trim = ""
      Do
@@ -391,54 +393,55 @@ Public Function HayesCommand(Handle, Command, TimeoutSec)
   HayesCommand = Result
 End Function
 
-Public Function ParseCommand(Command)
-	
+'**********************************************************
+'          Function for parsing commands
+'**********************************************************
+Public Function ParseCommand(Command)	
+	StatusMsg "Received command is" & Command
 	If Right(Command,8) = "Rate=1OK" then        	'<--Burst Mode
 		Rate = 1
 		StatusMsg "NewRate= " &Rate
 	ElseIf Right(Command,8) = "Rate=0OK" then    	'<--Regular Mode
 		Rate = 0
 		StatusMsg "NewRate= " &Rate
-	ElseIf Left(Command,3) = "OFi" then
-		Offset = Mid(Command, 5, 3)
+	ElseIf Left(Command,2) = "Oi" then
+		Offset = Mid(Command, 4, 4)
 		StatusMsg "Offset being incremented by" &Val(Offset)
 		SO2Offset = SO2Offset + Val(Offset)
-	ElseIf Left(Command,3) = "OFd" then
-		Offset = Mid(Command, 5, 3)
+	ElseIf Left(Command,2) = "Od" then
+		Offset = Mid(Command, 4, 4)
 		StatusMsg "Offset being decremented by" &Val(Offset)
 		SO2Offset = SO2Offset - Val(Offset)
-	'ElseIf Left(RemoteCmd,3) = "SoH" Then           'State of Health data from seismometer
-		'	SoH = 1
-		'	StatusMsg "State of health data requested"
-		'	If Mid(RemoteCmd, 4, 1) = 1
-		'		Env = 1
-		'	End If
-		'	If Mid(RemoteCmd, 5, 1) = 1
-		'		Tim = 1
-		'	End If
-		'	If Mid(RemoteCmd, 6, 1) = 1
-		'		Trig = 1
-		'	End If
-		'	startMillisSoH =  Mid(RemoteCmd, 8, 13)
-		'	endMillisSoH = Mid(RemoteCmd, 15, 13)
-
-		'ElseIf Left(RemoteCmd,3) = "TmS" Then           'State of Health data from seismometer
-		'	TmS = 1
-		'	StatusMsg "Time Series data requested"
-		'	If Mid(RemoteCmd, 4, 1) = 1
-		'		Ch1 = 1
-		'	End If
-		'	If Mid(RemoteCmd, 5, 1) = 1
-		'		Ch2 = 1
-		'	End If
-		'	If Mid(RemoteCmd, 6, 1) = 1
-		'		Ch3 = 1
-		'	End If
-		'	startMillisTmS =  Mid(RemoteCmd, 8, 13)
-		'	endMillisTmS = Mid(RemoteCmd, 15, 13)
+	ElseIf Left(RemoteCmd,3) = "SoH" Then           'State of Health data from seismometer
+		SoH = 1
+		StatusMsg "State of health data requested"
+		If Mid(RemoteCmd, 4, 1) = 1
+			Env = 1
 		End If
+		If Mid(RemoteCmd, 5, 1) = 1
+			Tim = 1
+		End If
+		If Mid(RemoteCmd, 6, 1) = 1
+			Trig = 1
+		End If
+		startMillisSoH =  Mid(RemoteCmd, 8, 13)
+		endMillisSoH = Mid(RemoteCmd, 15, 13)
+
+	ElseIf Left(RemoteCmd,3) = "TmS" Then           'State of Health data from seismometer
+		TmS = 1
+		StatusMsg "Time Series data requested"
+		If Mid(RemoteCmd, 4, 1) = 1
+			Ch1 = 1
+		End If
+		If Mid(RemoteCmd, 5, 1) = 1
+			Ch2 = 1
+		End If
+		If Mid(RemoteCmd, 6, 1) = 1
+			Ch3 = 1
+		End If
+		startMillisTmS =  Mid(RemoteCmd, 8, 13)
+		endMillisTmS = Mid(RemoteCmd, 15, 13)
+	End If
 
 	ParseCommand = "Success!"
 End Function
-
-
