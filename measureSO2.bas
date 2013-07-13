@@ -13,6 +13,8 @@ Public Declare Sub MeasureSO2
 
 
 Static So2Data
+Static PRT
+Static SO2Offset
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' Description of the subroutine goes HERE!!!
@@ -26,9 +28,16 @@ Public Sub MeasureSO2
 		If Err = 0 Then
 			
 			PowerAd 1, 1 				' To Power ON Digital Switched 12V
-			Sleep 5.0					' Give some time to the SO2 sensor to wake up
 
-			So2Data = Ad420(1, 10)  'Module 1, Input Analog Chan 5			
+			StatusMsg "Pump run time is "&PRT
+
+			If PRT = 0 Then
+				Sleep 5.0					' Give some time to the SO2 sensor to wake up
+			Else
+				Sleep PRT
+			End If
+
+			So2Data = Ad420(1, 8)+SO2Offset  'Module 1, Input Analog Chan 8			
 			
 			StatusMsg "So2 level: " +So2Data
 
