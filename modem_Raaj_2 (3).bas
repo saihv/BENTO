@@ -68,13 +68,34 @@ Const ECHO_OFF_CMD = "ECHO OFF"
 ' Global variables containing CO2, SO2, weather data and the sampling Rate
 '**************************************************************************
 Static Rate
+Static PRT
 Static CO2Data
 Static weatherData
 Static So2Data
-Static F2Level
-Static SO2_offset
-Static offset 
-SO2_positive_offset = 0
+Static SoH
+Static TmS
+Static Ch1
+Static Ch2
+Static Ch3
+Static startMillisTmS
+Static endMillisTmS
+Static Env
+Static Tim
+Static Trig
+Static startMillisSoH
+Static endMillisSoH
+Static CentaurData
+
+Dim TimeMil
+Dim UTC
+Dim Start
+Dim Duration
+Dim STA
+Dim LTA
+Dim Votes
+Dim Channel
+'SO2_positive_offset = 0
+CRLF = Chr(13)&Chr(10)
 
 '**************************************************************************
 ' Initialize Iridium Modem
@@ -133,7 +154,7 @@ Public Sub SendReceiveSBD(PORTNAME)
 	StatusMsg "SendReceiveSBD @ " & PORTNAME
 
 	Const RegTimeout = 60 '10 seconds
-	Const SendTimeout = 120 '10 seconds
+	Const SendTimeout = 60 '10 seconds
 	DataSetToTX =""	
 	RemoteCmd = ""
 
@@ -162,7 +183,9 @@ Public Sub SendReceiveSBD(PORTNAME)
 			Connected = False
 			Exit Sub
 		End If
-  
+
+		Call FormatData(DataSetToTX)
+		 
 		''''--Clear SBD Message Buffer--''''
 		'StatusMsg "AT+SBDD0"							'DEBUG
 		CmdOneResp = HayesCommand(PORT, "AT+SBDD0", 2)
@@ -171,9 +194,9 @@ Public Sub SendReceiveSBD(PORTNAME)
 			ErrorMsg "Command AT+SBDD failed: " &CmdOneResp
 			goto ErrorHandler
 		Else 
-			Call FormatData(DataSetToTX)
 			BinString = DataSetToTX
 			LenData = Format("%2d", Len(BinString))
+			StatusMsg LenData
 			Result = ComputeCRC(0,0,BinString) Mod 65536'
 			BinString = BinString & Chr(Result>>8) & Chr(Result Mod 256)
 			
@@ -193,6 +216,7 @@ Public Sub SendReceiveSBD(PORTNAME)
 					goto ErrorHandler
 				End If
 			End If
+			
 		End If
 	
 		'Initiate SBD Session to send the data
@@ -201,7 +225,7 @@ Public Sub SendReceiveSBD(PORTNAME)
 	
 		Do
 			StatusMsg "Sending AT+SBDI"
-			CmdFourResp = HayesCommand(PORT, "AT+SBDI", 15)
+			CmdFourResp = HayesCommand(PORT, "AT+SBDI", 120)
 			StatusMsg "CmdFourResp SBDI=" &CmdFourResp
 		
 			If Left(CmdFourResp, 8) = "+SBDI: 1" then
@@ -213,39 +237,27 @@ Public Sub SendReceiveSBD(PORTNAME)
 				StatusMsg "RemoteCmd: " & RemoteCmd
 
 				CommandCtr = 0
+				NextStart = 1
 	
 				If Right(RemoteCmd,1) = "K" then
 					Length = Len(RemoteCmd)
 					StatusMsg "Length is" & Length
-					If Length = 8 Then
+					If Length = 8 OR Length = 35 Then
 						ABC = ParseCommand(RemoteCmd)
 						StatusMsg "Parsing Single Command"
 					Else
 						i = 1
 						While i <= Length
 							If Mid(RemoteCmd, i, 1) = ";" Then
-								If Commandctr = 0 Then
-									Command1 = Left(RemoteCmd, i-1)
-									StatusMsg "Command1 is " &Command1
-									ABC = ParseCommand(Command1)
-									NextStart = i
+									Command = Mid(RemoteCmd, NextStart, i-NextStart)
+									StatusMsg "Command is " &Command
+									ABC = ParseCommand(Command)
+									NextStart = i+1
 									Commandctr = Commandctr + 1
-								ElseIf Commandctr = 1 Then
-									Command2 = Mid(RemoteCmd, NextStart, (i-1)-NextStart)
-									StatusMsg "Command2 is " &Command2
-									ABC = ParseCommand(Command2)
-									NextStart = i
-									Commandctr = Commandctr + 1
-								ElseIf Commandctr = 2 Then
-									Command3 = Mid(RemoteCmd, NextStart, (i-1)-NextStart)
-									ABC = ParseCommand(Command3)
-									NextStart = i
-									Commandctr = Commandctr + 1
-								End If
 							End If
 							i = i+1
 						Wend
-						CommandLast = Mid(RemoteCmd, NextStart, Length)
+						CommandLast = Mid(RemoteCmd, NextStart+1, Length)
 						StatusMsg "Parsing final command" & CommandLast
 						ABC = ParseCommand(CommandLast)
 					End If
@@ -267,11 +279,11 @@ Public Sub SendReceiveSBD(PORTNAME)
 			ErrorMsg "SBDI timeout: " &CmdFourResp			
 			goto ErrorHandler
 		End If
-	
+
 		ErrorHandler:
 		'Call ClrDTRPort(PORT)
 		'Call ClosePort(PORT)
-		Close PORT
+		Close PORT		
 		
 	Close PORT
 	
@@ -332,7 +344,7 @@ Public Sub FormatData(DataSetToTX)
 	StatusMsg "SO2 data just before sending: " +So2Data
 	'Finally, add the SO2 value to the string to TX
 	DataToTx = DataToTx + "," + So2Data + "S"
-	
+
 	'Grab First Set of data and add battery voltage and Rate values too
 	battery = Format("%2.1f", Systat(5))		' Systat provides info about Sutron's internal state according to input number. 5 = Battery status/value
 	DateTimeStr = DateTimeStr + "B" + battery + "R" + Rate
@@ -340,9 +352,9 @@ Public Sub FormatData(DataSetToTX)
 
 	StatusMsg "<" + DataSetToTX + ">"
 
-	'Open "\SD Card\Output.Txt" For Append As F1
-	'Print F1, DataSetToTX
-	'Close F1
+	Open "\SD Card\Output.Txt" As F3
+	Print F3, DataSetToTX
+	Close F3
 	
 End Sub
 
@@ -412,36 +424,10 @@ Public Function ParseCommand(Command)
 		Offset = Mid(Command, 4, 4)
 		StatusMsg "Offset being decremented by" &Val(Offset)
 		SO2Offset = SO2Offset - Val(Offset)
-	ElseIf Left(RemoteCmd,3) = "SoH" Then           'State of Health data from seismometer
-		SoH = 1
-		StatusMsg "State of health data requested"
-		If Mid(RemoteCmd, 4, 1) = 1
-			Env = 1
-		End If
-		If Mid(RemoteCmd, 5, 1) = 1
-			Tim = 1
-		End If
-		If Mid(RemoteCmd, 6, 1) = 1
-			Trig = 1
-		End If
-		startMillisSoH =  Mid(RemoteCmd, 8, 13)
-		endMillisSoH = Mid(RemoteCmd, 15, 13)
-
-	ElseIf Left(RemoteCmd,3) = "TmS" Then           'State of Health data from seismometer
-		TmS = 1
-		StatusMsg "Time Series data requested"
-		If Mid(RemoteCmd, 4, 1) = 1
-			Ch1 = 1
-		End If
-		If Mid(RemoteCmd, 5, 1) = 1
-			Ch2 = 1
-		End If
-		If Mid(RemoteCmd, 6, 1) = 1
-			Ch3 = 1
-		End If
-		startMillisTmS =  Mid(RemoteCmd, 8, 13)
-		endMillisTmS = Mid(RemoteCmd, 15, 13)
-	End If
-
+	ElseIf Left(Command,2) = "Pt" then
+		PRT = Mid(Command, 4, 4)
+		StatusMsg "Pump Run Time changed to" &PRT& " seconds"
+	
 	ParseCommand = "Success!"
+	End If
 End Function
